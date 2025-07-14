@@ -26,13 +26,22 @@ st.set_page_config(page_title="EEG Depression Detector", layout="wide")
 st.title("🧠 EEG-Based Depression Detection Demo")
 
 uploaded_file = st.file_uploader("Upload an EDF file", type="edf")
-
-if uploaded_file is not None:
+    if uploaded_file is not None:
     st.success("File uploaded successfully!")
-    raw = mne.io.read_raw_edf(uploaded_file, preload=True, verbose=False)
-    raw.filter(1., 50., fir_design='firwin', verbose=False)
-    data, times = raw[:1, :]  # استفاده از یک کانال برای نمایش ساده
 
+    # ذخیره فایل موقت روی دیسک
+    with open("temp.edf", "wb") as f:
+        f.write(uploaded_file.getbuffer())
+
+    # خواندن فایل ذخیره‌شده با mne
+    raw = mne.io.read_raw_edf("temp.edf", preload=True, verbose=False)
+
+    # فیلتر کردن سیگنال EEG
+    raw.filter(1., 50., fir_design='firwin', verbose=False)
+
+    # استخراج دیتا و زمان از یک کانال
+    data, times = raw[:1, :]
+        
     # نمایش سیگنال EEG
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(times, data[0], color='purple')
