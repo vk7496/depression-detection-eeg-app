@@ -26,13 +26,12 @@ st.set_page_config(page_title="EEG Depression Detector", layout="wide")
 st.title("🧠 EEG-Based Depression Detection Demo")
 
 uploaded_file = st.file_uploader("Upload an EDF file", type="edf")
+
     if uploaded_file is not None:
     st.success("File uploaded successfully!")
-
     # ذخیره فایل موقت روی دیسک
     with open("temp.edf", "wb") as f:
         f.write(uploaded_file.getbuffer())
-
     # خواندن فایل ذخیره‌شده با mne
     raw = mne.io.read_raw_edf("temp.edf", preload=True, verbose=False)
 
