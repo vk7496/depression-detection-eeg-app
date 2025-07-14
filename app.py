@@ -29,18 +29,22 @@ uploaded_file = st.file_uploader("Upload an EDF file", type="edf")
 
     if uploaded_file is not None:
     st.success("File uploaded successfully!")
-    # ذخیره فایل موقت روی دیسک
-    with open("temp.edf", "wb") as f:
-        f.write(uploaded_file.getbuffer())
-    # خواندن فایل ذخیره‌شده با mne
-    raw = mne.io.read_raw_edf("temp.edf", preload=True, verbose=False)
 
-    # فیلتر کردن سیگنال EEG
+    # ذخیره فایل آپلودی به صورت محلی
+    with open("temp_file.edf", "wb") as f:
+        f.write(uploaded_file.getbuffer())
+
+    # خواندن فایل با MNE
+    raw = mne.io.read_raw_edf("temp_file.edf", preload=True, verbose=False)
     raw.filter(1., 50., fir_design='firwin', verbose=False)
 
-    # استخراج دیتا و زمان از یک کانال
-    data, times = raw[:1, :]
-        
+    # استخراج داده‌ها
+    data, times = raw[:1, :]  # یک کانال برای تست
+
+    # نمایش اطلاعات اولیه
+    st.write("Sampling frequency:", raw.info['sfreq'])
+    st.write("Data shape:", data.shape)
+
     # نمایش سیگنال EEG
     fig, ax = plt.subplots(figsize=(10, 4))
     ax.plot(times, data[0], color='purple')
