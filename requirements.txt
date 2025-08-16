@@ -4,3 +4,6 @@ mne
 matplotlib
 numpy
 scipy
+fpdf
+pandas
+scikit-learn
