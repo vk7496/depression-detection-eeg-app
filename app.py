@@ -1,59 +1,61 @@
 import streamlit as st
+import numpy as np
 from fpdf import FPDF
-import datetime
+import os
 
-# --- App Title ---
-st.title("🧠 EEG Depression Detection Demo")
+# =========================
+# Function to generate PDF
+# =========================
+def generate_report(patient_name, result, probability):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt="Depression Detection Report", ln=True, align='C')
 
-# --- Upload EEG File (Demo) ---
-uploaded_file = st.file_uploader("Upload EEG file (.edf)", type=["edf"])
+    pdf.set_font("Arial", size=12)
+    pdf.ln(10)
 
-if uploaded_file is not None:
-    st.success("✅ EEG file uploaded successfully!")
+    pdf.cell(200, 10, txt=f"Patient Name: {patient_name}", ln=True)
+    pdf.cell(200, 10, txt=f"Diagnosis Result: {result}", ln=True)
+    pdf.cell(200, 10, txt=f"Model Confidence: {probability:.2f}%", ln=True)
 
-    # --- Fake Prediction (Demo) ---
-    st.subheader("Prediction Result")
-    depression_level = "Moderate Depression"
-    confidence = 82.5  # just an example
-    st.write(f"**Result:** {depression_level}")
-    st.write(f"**Confidence:** {confidence}%")
+    pdf.ln(10)
+    pdf.multi_cell(0, 10, txt=(
+        "This report was generated using AI analysis of EEG signals.\n"
+        "Note: This is a decision-support tool and not a substitute for "
+        "professional medical diagnosis."
+    ))
 
-    # --- Generate PDF Report ---
-    def generate_pdf():
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
+    filename = f"report_{patient_name.replace(' ', '_')}.pdf"
+    pdf.output(filename)
+    return filename
 
-        # Title
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(200, 10, "EEG Depression Analysis Report", ln=True, align="C")
-        pdf.ln(10)
+# =========================
+# Streamlit App
+# =========================
+st.title("🧠 EEG Depression Detection App")
+st.write("Upload EEG data and generate a diagnostic report.")
 
-        # Patient Info (dummy data)
-        pdf.set_font("Arial", size=12)
-        pdf.cell(200, 10, f"Patient ID: 12345", ln=True)
-        pdf.cell(200, 10, f"Date: {datetime.date.today()}", ln=True)
-        pdf.ln(10)
+# Example UI
+patient_name = st.text_input("Enter Patient Name:")
 
-        # Prediction results
-        pdf.cell(200, 10, f"Predicted Condition: {depression_level}", ln=True)
-        pdf.cell(200, 10, f"Confidence: {confidence}%", ln=True)
-        pdf.ln(10)
+if st.button("Run Analysis"):
+    # Fake model result (for demo) → replace with your ML prediction
+    result = "Depression Detected"
+    probability = np.random.uniform(70, 95)  # simulated confidence
+    
+    st.success(f"**Result:** {result} (Confidence: {probability:.2f}%)")
 
-        # Medical Note
-        pdf.multi_cell(0, 10, 
-            "Note: This is a demo AI-generated analysis based on EEG data.\n"
-            "It is intended for research and demonstration purposes only."
+    # Generate PDF
+    pdf_file = generate_report(patient_name, result, probability)
+
+    # Allow download
+    with open(pdf_file, "rb") as f:
+        st.download_button(
+            label="📥 Download PDF Report",
+            data=f,
+            file_name=pdf_file,
+            mime="application/pdf"
         )
 
-        return pdf.output(dest="S").encode("latin-1")
-
-    # Button to download PDF
-    pdf_bytes = generate_pdf()
-    st.download_button(
-        label="📄 Download PDF Report",
-        data=pdf_bytes,
-        file_name="EEG_Report.pdf",
-        mime="application/pdf"
-    )
 
