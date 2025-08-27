@@ -1,104 +1,89 @@
 import streamlit as st
-import random
+import mne
+import numpy as np
 import json
-from datetime import datetime
+from io import BytesIO
+from reportlab.lib.pagesizes import A4
+from reportlab.pdfgen import canvas
+from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfbase import pdfmetrics
 
-# ------------------------
-# Title
-# ------------------------
-st.set_page_config(page_title="Depression Assessment Demo", layout="centered")
-st.title("🧠 Depression & Cognitive Assessment (Demo)")
-st.write("Prototype demo combining **EEG**, **Questionnaire**, and **Cognitive Test**.")
+# ثبت فونت عربی/فارسی (Amiri)
+pdfmetrics.registerFont(TTFont("Amiri", "/usr/share/fonts/truetype/amiri/Amiri-Regular.ttf"))
 
-# ------------------------
-# Section 1: EEG Upload
-# ------------------------
-st.header("📂 EEG Data Upload")
-uploaded_eeg = st.file_uploader("Upload your EEG file (.edf)", type=["edf"])
+# عنوان اصلی
+st.title("🧠 EEG Depression & Alzheimer’s Early Risk App")
 
-if uploaded_eeg is not None:
-    st.success("EEG file uploaded successfully ✅")
-    eeg_score = random.randint(30, 80)  # Simulated analysis
-    st.write(f"**EEG Depression Risk Score:** {eeg_score}/100")
-else:
-    eeg_score = None
+# زیرعنوان علمی
+st.markdown(
+    "<h5 style='color:gray;'>Prototype for early Alzheimer’s risk screening using EEG, questionnaires and cognitive micro-tasks.</h5>",
+    unsafe_allow_html=True
+)
 
-# ------------------------
-# Section 2: Questionnaire
-# ------------------------
-st.header("📝 Mood & Sleep Questionnaire")
-q1 = st.slider("Over the last 2 weeks, how often have you felt little interest or pleasure in doing things?", 0, 3, 1)
-q2 = st.slider("How often have you felt down, depressed, or hopeless?", 0, 3, 1)
-q3 = st.slider("How would you rate your sleep quality?", 1, 5, 3)
+# آپلود فایل EEG (.edf)
+uploaded_file = st.file_uploader("📂 لطفاً فایل EEG با فرمت .edf را آپلود کنید", type=["edf"])
 
-questionnaire_score = q1 + q2 + (6 - q3)  # higher = worse mood/sleep
-st.write(f"**Questionnaire Score:** {questionnaire_score}")
+if uploaded_file is not None:
+    # بارگذاری EEG
+    raw = mne.io.read_raw_edf(uploaded_file, preload=True, verbose=False)
+    data, times = raw[:, :1000]  # نمونه داده (۱۰۰۰ تایم‌پوینت اول)
+    mean_signal = np.mean(data)
 
-# ------------------------
-# Section 3: Cognitive Test (Working Memory)
-# ------------------------
-st.header("🧩 Cognitive Test (n-back)")
-st.write("Press the button if the current number matches the one shown 2 steps earlier.")
-
-if "sequence" not in st.session_state:
-    st.session_state.sequence = []
-    st.session_state.correct = 0
-    st.session_state.shown = 0
-
-if st.button("Show Next Number"):
-    num = random.randint(1, 9)
-    st.session_state.sequence.append(num)
-    st.session_state.shown += 1
-    st.write(f"### {num}")
-
-if st.button("Match!"):
-    if len(st.session_state.sequence) >= 3:
-        if st.session_state.sequence[-1] == st.session_state.sequence[-3]:
-            st.session_state.correct += 1
-            st.success("Correct ✅")
-        else:
-            st.error("Wrong ❌")
+    # 🔹 شبیه‌سازی پیش‌بینی مدل
+    if mean_signal > 0:
+        prediction = "Mild Depression"
+        early_risk_index = 0.35
     else:
-        st.warning("Not enough numbers yet.")
+        prediction = "Severe Depression"
+        early_risk_index = 0.72
 
-st.write(f"**Correct Responses:** {st.session_state.correct}")
+    st.success(f"✅ Prediction: {prediction}")
+    st.info(f"🧾 Early Risk Index: {early_risk_index:.2f}")
 
-# ------------------------
-# Section 4: Combined Index
-# ------------------------
-st.header("📊 Combined Assessment Index")
+    # =====================
+    # 📄 ساخت گزارش PDF
+    # =====================
+    def create_pdf(prediction, early_risk_index):
+        buffer = BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        c.setFont("Amiri", 14)
+        c.drawString(100, 800, "EEG Depression & Alzheimer’s Risk Report")
+        c.drawString(100, 770, f"Prediction: {prediction}")
+        c.drawString(100, 750, f"Early Risk Index: {early_risk_index:.2f}")
+        c.drawString(100, 720, "مرحباً بكم، هذا التقرير يوضح نتيجة تحليل EEG للفحص المبكر عن الاكتئاب و خطر الزهايمر.")
+        c.showPage()
+        c.save()
+        buffer.seek(0)
+        return buffer
 
-if eeg_score is not None:
-    combined = (eeg_score * 0.5) + (questionnaire_score * 10 * 0.3) + (st.session_state.correct * 5 * 0.2)
-    combined = min(100, int(combined))
-    st.metric("Final Combined Score", f"{combined}/100")
+    pdf_file = create_pdf(prediction, early_risk_index)
 
-    if combined < 40:
-        st.success("🟢 Low Risk of Depression")
-    elif combined < 70:
-        st.warning("🟡 Moderate Risk of Depression")
-    else:
-        st.error("🔴 High Risk of Depression")
+    # =====================
+    # 📦 ساخت گزارش JSON
+    # =====================
+    def create_json(prediction, early_risk_index):
+        report = {
+            "prediction": prediction,
+            "early_risk_index": early_risk_index,
+            "note": "Prototype result for early Alzheimer’s risk screening"
+        }
+        return json.dumps(report, indent=4).encode("utf-8")
 
-    # ------------------------
-    # Save Report as JSON
-    # ------------------------
-    report = {
-        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
-        "EEG_score": eeg_score,
-        "Questionnaire_score": questionnaire_score,
-        "Cognitive_correct": st.session_state.correct,
-        "Combined_index": combined
-    }
+    json_file = create_json(prediction, early_risk_index)
+
+    # =====================
+    # 📥 دکمه‌های دانلود
+    # =====================
+    st.download_button(
+        label="⬇️ Download PDF Report",
+        data=pdf_file,
+        file_name="report.pdf",
+        mime="application/pdf"
+    )
 
     st.download_button(
-        label="📥 Download Report (JSON)",
-        data=json.dumps(report, indent=4),
-        file_name="depression_report.json",
+        label="⬇️ Download JSON Report",
+        data=json_file,
+        file_name="report.json",
         mime="application/json"
     )
-else:
-    st.info("Please upload an EEG file to calculate the final index.")
-
-
-
