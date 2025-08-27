@@ -1,9 +1,8 @@
-
 streamlit
 mne
-matplotlib
 numpy
-scipy
-fpdf
 pandas
 scikit-learn
+matplotlib
+reportlab
+
