@@ -1,60 +1,104 @@
 import streamlit as st
-from fpdf import FPDF
-import datetime
+import random
+import json
+from datetime import datetime
 
-# --- App Title ---
-st.title("🧠 EEG Depression Detection Demo")
+# ------------------------
+# Title
+# ------------------------
+st.set_page_config(page_title="Depression Assessment Demo", layout="centered")
+st.title("🧠 Depression & Cognitive Assessment (Demo)")
+st.write("Prototype demo combining **EEG**, **Questionnaire**, and **Cognitive Test**.")
 
-# --- Upload EEG File (Demo) ---
-uploaded_file = st.file_uploader("Upload EEG file (.edf)", type=["edf"])
+# ------------------------
+# Section 1: EEG Upload
+# ------------------------
+st.header("📂 EEG Data Upload")
+uploaded_eeg = st.file_uploader("Upload your EEG file (.edf)", type=["edf"])
 
-if uploaded_file is not None:
-    st.success("✅ EEG file uploaded successfully!")
+if uploaded_eeg is not None:
+    st.success("EEG file uploaded successfully ✅")
+    eeg_score = random.randint(30, 80)  # Simulated analysis
+    st.write(f"**EEG Depression Risk Score:** {eeg_score}/100")
+else:
+    eeg_score = None
 
-    # --- Fake Prediction (Demo) ---
-    st.subheader("Prediction Result")
-    depression_level = "Moderate Depression"
-    confidence = 82.5  # just an example
-    st.write(f"**Result:** {depression_level}")
-    st.write(f"**Confidence:** {confidence}%")
+# ------------------------
+# Section 2: Questionnaire
+# ------------------------
+st.header("📝 Mood & Sleep Questionnaire")
+q1 = st.slider("Over the last 2 weeks, how often have you felt little interest or pleasure in doing things?", 0, 3, 1)
+q2 = st.slider("How often have you felt down, depressed, or hopeless?", 0, 3, 1)
+q3 = st.slider("How would you rate your sleep quality?", 1, 5, 3)
 
-    # --- Generate PDF Report ---
-    def generate_pdf():
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
+questionnaire_score = q1 + q2 + (6 - q3)  # higher = worse mood/sleep
+st.write(f"**Questionnaire Score:** {questionnaire_score}")
 
-        # Title
-        pdf.set_font("Arial", "B", 16)
-        pdf.cell(200, 10, "EEG Depression Analysis Report", ln=True, align="C")
-        pdf.ln(10)
+# ------------------------
+# Section 3: Cognitive Test (Working Memory)
+# ------------------------
+st.header("🧩 Cognitive Test (n-back)")
+st.write("Press the button if the current number matches the one shown 2 steps earlier.")
 
-        # Patient Info (dummy data)
-        pdf.set_font("Arial", size=12)
-        pdf.cell(200, 10, f"Patient ID: 12345", ln=True)
-        pdf.cell(200, 10, f"Date: {datetime.date.today()}", ln=True)
-        pdf.ln(10)
+if "sequence" not in st.session_state:
+    st.session_state.sequence = []
+    st.session_state.correct = 0
+    st.session_state.shown = 0
 
-        # Prediction results
-        pdf.cell(200, 10, f"Predicted Condition: {depression_level}", ln=True)
-        pdf.cell(200, 10, f"Confidence: {confidence}%", ln=True)
-        pdf.ln(10)
+if st.button("Show Next Number"):
+    num = random.randint(1, 9)
+    st.session_state.sequence.append(num)
+    st.session_state.shown += 1
+    st.write(f"### {num}")
 
-        # Medical Note
-        pdf.multi_cell(0, 10, 
-            "Note: This is a demo AI-generated analysis based on EEG data.\n"
-            "It is intended for research and demonstration purposes only."
-        )
+if st.button("Match!"):
+    if len(st.session_state.sequence) >= 3:
+        if st.session_state.sequence[-1] == st.session_state.sequence[-3]:
+            st.session_state.correct += 1
+            st.success("Correct ✅")
+        else:
+            st.error("Wrong ❌")
+    else:
+        st.warning("Not enough numbers yet.")
 
-        return pdf.output(dest="S").encode("latin-1")
+st.write(f"**Correct Responses:** {st.session_state.correct}")
 
-    # Button to download PDF
-    pdf_bytes = generate_pdf()
+# ------------------------
+# Section 4: Combined Index
+# ------------------------
+st.header("📊 Combined Assessment Index")
+
+if eeg_score is not None:
+    combined = (eeg_score * 0.5) + (questionnaire_score * 10 * 0.3) + (st.session_state.correct * 5 * 0.2)
+    combined = min(100, int(combined))
+    st.metric("Final Combined Score", f"{combined}/100")
+
+    if combined < 40:
+        st.success("🟢 Low Risk of Depression")
+    elif combined < 70:
+        st.warning("🟡 Moderate Risk of Depression")
+    else:
+        st.error("🔴 High Risk of Depression")
+
+    # ------------------------
+    # Save Report as JSON
+    # ------------------------
+    report = {
+        "date": datetime.now().strftime("%Y-%m-%d %H:%M"),
+        "EEG_score": eeg_score,
+        "Questionnaire_score": questionnaire_score,
+        "Cognitive_correct": st.session_state.correct,
+        "Combined_index": combined
+    }
+
     st.download_button(
-        label="📄 Download PDF Report",
-        data=pdf_bytes,
-        file_name="EEG_Report.pdf",
-        mime="application/pdf"
+        label="📥 Download Report (JSON)",
+        data=json.dumps(report, indent=4),
+        file_name="depression_report.json",
+        mime="application/json"
     )
+else:
+    st.info("Please upload an EEG file to calculate the final index.")
+
 
 
