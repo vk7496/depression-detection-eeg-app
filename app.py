@@ -1,89 +1,57 @@
 import streamlit as st
-import mne
-import numpy as np
 import json
-from io import BytesIO
-from reportlab.lib.pagesizes import A4
+from reportlab.lib.pagesizes import letter
 from reportlab.pdfgen import canvas
-from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.pdfbase import pdfmetrics
+import io
+import base64
 
-# ثبت فونت عربی/فارسی (Amiri)
-pdfmetrics.registerFont(TTFont("Amiri", "/usr/share/fonts/truetype/amiri/Amiri-Regular.ttf"))
+st.title("EEG Depression & Early Alzheimer’s Risk Prototype")
+st.subheader("Prototype for Early Alzheimers risk screening using EEG, questionnaires and cognitive micro-tasks.")
 
-# عنوان اصلی
-st.title("🧠 EEG Depression & Alzheimer’s Early Risk App")
+uploaded_file = st.file_uploader("Upload your EEG (.edf) file", type=["edf"])
 
-# زیرعنوان علمی
-st.markdown(
-    "<h5 style='color:gray;'>Prototype for early Alzheimer’s risk screening using EEG, questionnaires and cognitive micro-tasks.</h5>",
-    unsafe_allow_html=True
-)
-
-# آپلود فایل EEG (.edf)
-uploaded_file = st.file_uploader("📂 لطفاً فایل EEG با فرمت .edf را آپلود کنید", type=["edf"])
-
-if uploaded_file is not None:
-    # بارگذاری EEG
-    raw = mne.io.read_raw_edf(uploaded_file, preload=True, verbose=False)
-    data, times = raw[:, :1000]  # نمونه داده (۱۰۰۰ تایم‌پوینت اول)
-    mean_signal = np.mean(data)
-
-    # 🔹 شبیه‌سازی پیش‌بینی مدل
-    if mean_signal > 0:
-        prediction = "Mild Depression"
-        early_risk_index = 0.35
-    else:
-        prediction = "Severe Depression"
-        early_risk_index = 0.72
-
-    st.success(f"✅ Prediction: {prediction}")
-    st.info(f"🧾 Early Risk Index: {early_risk_index:.2f}")
-
-    # =====================
-    # 📄 ساخت گزارش PDF
-    # =====================
-    def create_pdf(prediction, early_risk_index):
-        buffer = BytesIO()
-        c = canvas.Canvas(buffer, pagesize=A4)
-        c.setFont("Amiri", 14)
-        c.drawString(100, 800, "EEG Depression & Alzheimer’s Risk Report")
-        c.drawString(100, 770, f"Prediction: {prediction}")
-        c.drawString(100, 750, f"Early Risk Index: {early_risk_index:.2f}")
-        c.drawString(100, 720, "مرحباً بكم، هذا التقرير يوضح نتيجة تحليل EEG للفحص المبكر عن الاكتئاب و خطر الزهايمر.")
+if uploaded_file:
+    st.success("File uploaded successfully ✅")
+    
+    # --- Dummy Analysis (replace later with real model) ---
+    # simulate a result
+    result = {
+        "Early Risk Index": "Moderate",
+        "EEG Biomarker Score": 0.62,
+        "Cognitive Performance": "Slightly Below Average"
+    }
+    
+    st.write("### Results")
+    st.json(result)
+    
+    # --- JSON download ---
+    json_str = json.dumps(result, indent=4)
+    st.download_button("Download JSON", data=json_str, file_name="result.json", mime="application/json")
+    
+    # --- PDF download ---
+    def create_pdf(data_dict):
+        buffer = io.BytesIO()
+        c = canvas.Canvas(buffer, pagesize=letter)
+        width, height = letter
+        
+        c.setFont("Helvetica-Bold", 14)
+        c.drawString(50, height - 50, "EEG Report - Early Alzheimer’s Risk Screening")
+        
+        c.setFont("Helvetica", 10)
+        c.drawString(50, height - 70, "Prototype for early risk screening using EEG, questionnaires and cognitive micro-tasks")
+        
+        y = height - 110
+        for key, value in data_dict.items():
+            c.drawString(50, y, f"{key}: {value}")
+            y -= 20
+        
         c.showPage()
         c.save()
-        buffer.seek(0)
-        return buffer
-
-    pdf_file = create_pdf(prediction, early_risk_index)
-
-    # =====================
-    # 📦 ساخت گزارش JSON
-    # =====================
-    def create_json(prediction, early_risk_index):
-        report = {
-            "prediction": prediction,
-            "early_risk_index": early_risk_index,
-            "note": "Prototype result for early Alzheimer’s risk screening"
-        }
-        return json.dumps(report, indent=4).encode("utf-8")
-
-    json_file = create_json(prediction, early_risk_index)
-
-    # =====================
-    # 📥 دکمه‌های دانلود
-    # =====================
-    st.download_button(
-        label="⬇️ Download PDF Report",
-        data=pdf_file,
-        file_name="report.pdf",
-        mime="application/pdf"
-    )
-
-    st.download_button(
-        label="⬇️ Download JSON Report",
-        data=json_file,
-        file_name="report.json",
-        mime="application/json"
-    )
+        pdf = buffer.getvalue()
+        buffer.close()
+        return pdf
+    
+    pdf_bytes = create_pdf(result)
+    b64_pdf = base64.b64encode(pdf_bytes).decode()
+    pdf_link = f'<a href="data:application/pdf;base64,{b64_pdf}" download="report.pdf">📄 Download PDF</a>'
+    st.markdown(pdf_link, unsafe_allow_html=True)
