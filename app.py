@@ -1,57 +1,111 @@
 import streamlit as st
+import mne
+import numpy as np
 import json
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-import io
-import base64
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+from io import BytesIO
 
-st.title("EEG Depression & Early Alzheimer’s Risk Prototype")
-st.subheader("Prototype for Early Alzheimers risk screening using EEG, questionnaires and cognitive micro-tasks.")
+# -------------------
+# Simulated Prediction (dummy model)
+# -------------------
+def predict_depression(features):
+    # Just a placeholder function
+    score = np.mean(list(features.values()))
+    if score < 0.3:
+        return "No Depression", score
+    elif score < 0.6:
+        return "Mild Depression", score
+    else:
+        return "Severe Depression", score
 
-uploaded_file = st.file_uploader("Upload your EEG (.edf) file", type=["edf"])
+# -------------------
+# Feature Extraction (simplified)
+# -------------------
+def extract_features(raw):
+    data = raw.get_data()
+    psd, freqs = mne.time_frequency.psd_array_welch(
+        data, sfreq=raw.info["sfreq"], fmin=1, fmax=50, n_fft=256
+    )
 
-if uploaded_file:
-    st.success("File uploaded successfully ✅")
-    
-    # --- Dummy Analysis (replace later with real model) ---
-    # simulate a result
-    result = {
-        "Early Risk Index": "Moderate",
-        "EEG Biomarker Score": 0.62,
-        "Cognitive Performance": "Slightly Below Average"
+    features = {
+        "delta_power": float(np.mean(psd[:, (freqs >= 1) & (freqs < 4)])),
+        "theta_power": float(np.mean(psd[:, (freqs >= 4) & (freqs < 8)])),
+        "alpha_power": float(np.mean(psd[:, (freqs >= 8) & (freqs < 13)])),
+        "beta_power": float(np.mean(psd[:, (freqs >= 13) & (freqs < 30)])),
     }
-    
-    st.write("### Results")
-    st.json(result)
-    
-    # --- JSON download ---
-    json_str = json.dumps(result, indent=4)
-    st.download_button("Download JSON", data=json_str, file_name="result.json", mime="application/json")
-    
-    # --- PDF download ---
-    def create_pdf(data_dict):
-        buffer = io.BytesIO()
-        c = canvas.Canvas(buffer, pagesize=letter)
-        width, height = letter
-        
-        c.setFont("Helvetica-Bold", 14)
-        c.drawString(50, height - 50, "EEG Report - Early Alzheimer’s Risk Screening")
-        
-        c.setFont("Helvetica", 10)
-        c.drawString(50, height - 70, "Prototype for early risk screening using EEG, questionnaires and cognitive micro-tasks")
-        
-        y = height - 110
-        for key, value in data_dict.items():
-            c.drawString(50, y, f"{key}: {value}")
-            y -= 20
-        
-        c.showPage()
-        c.save()
-        pdf = buffer.getvalue()
-        buffer.close()
-        return pdf
-    
-    pdf_bytes = create_pdf(result)
-    b64_pdf = base64.b64encode(pdf_bytes).decode()
-    pdf_link = f'<a href="data:application/pdf;base64,{b64_pdf}" download="report.pdf">📄 Download PDF</a>'
-    st.markdown(pdf_link, unsafe_allow_html=True)
+    return features
+
+# -------------------
+# Report (PDF)
+# -------------------
+def generate_pdf_report(result, score, features, sfreq, nchan, ch_names):
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer)
+    styles = getSampleStyleSheet()
+    elements = []
+
+    elements.append(Paragraph("Depression Detection Report", styles["Title"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph(f"Prediction: {result}", styles["Normal"]))
+    elements.append(Paragraph(f"Score: {score:.2f}", styles["Normal"]))
+    elements.append(Paragraph(f"Sampling rate: {sfreq} Hz", styles["Normal"]))
+    elements.append(Paragraph(f"Number of channels: {nchan}", styles["Normal"]))
+    elements.append(Paragraph(f"Channels: {', '.join(ch_names[:10])}...", styles["Normal"]))
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph("Extracted Features:", styles["Heading2"]))
+    for k, v in features.items():
+        elements.append(Paragraph(f"{k}: {v:.4f}", styles["Normal"]))
+
+    doc.build(elements)
+    buffer.seek(0)
+    return buffer
+
+# -------------------
+# Streamlit UI
+# -------------------
+st.title("🧠 EEG-based Depression Detection App")
+
+uploaded_file = st.file_uploader("Upload an EEG file (.edf)", type=["edf"])
+
+if uploaded_file is not None:
+    raw = mne.io.read_raw_edf(uploaded_file, preload=False, verbose=False)
+
+    # Show EEG info
+    st.subheader("EEG File Info")
+    st.info(f"Sampling rate (Hz): {raw.info['sfreq']}")
+    st.info(f"Number of channels: {raw.info['nchan']}")
+    st.caption(f"Channels: {', '.join(raw.ch_names[:16])}{' ...' if len(raw.ch_names)>16 else ''}")
+
+    # Extract features & Predict
+    features = extract_features(raw)
+    result, score = predict_depression(features)
+
+    st.subheader("Prediction Result")
+    st.success(f"Prediction: {result} (score={score:.2f})")
+
+    # JSON output
+    json_result = {
+        "prediction": result,
+        "score": score,
+        "sampling_rate": raw.info["sfreq"],
+        "channels": raw.ch_names,
+        "features": features,
+    }
+    st.download_button(
+        label="⬇️ Download JSON",
+        data=json.dumps(json_result, indent=4),
+        file_name="depression_result.json",
+        mime="application/json",
+    )
+
+    # PDF output
+    pdf_buffer = generate_pdf_report(
+        result, score, features, raw.info["sfreq"], raw.info["nchan"], raw.ch_names
+    )
+    st.download_button(
+        label="⬇️ Download PDF Report",
+        data=pdf_buffer,
+        file_name="depression_report.pdf",
+        mime="application/pdf",
+    )
