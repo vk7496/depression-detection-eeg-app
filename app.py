@@ -1,84 +1,122 @@
 import streamlit as st
 import numpy as np
-import mne
+import json
+import io
+from mne.io import read_raw_edf
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from reportlab.pdfgen import canvas
+from datetime import datetime
 
-# -----------------------------
-# Title & Description
-# -----------------------------
-st.title("🧠 Depression & Cognitive Assessment (Demo)")
-st.write("Prototype for early Alzheimer’s risk screening using EEG, questionnaires, and cognitive micro-tasks.")
+# -------------------------
+# Helper: Generate PDF Report
+# -------------------------
+def generate_pdf(result_data):
+    buffer = io.BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
 
-# -----------------------------
-# EEG Upload & Processing
-# -----------------------------
-st.header("📊 EEG Data Upload")
+    # Title
+    c.setFont("Helvetica-Bold", 18)
+    c.setFillColor(colors.darkblue)
+    c.drawString(100, height - 80, "EEG-based Depression & Cognitive Assessment Report")
 
+    # Date
+    c.setFont("Helvetica", 10)
+    c.setFillColor(colors.black)
+    c.drawString(100, height - 100, f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+    # Section: EEG Analysis
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(100, height - 150, "EEG Analysis Result")
+    c.setFont("Helvetica", 12)
+    c.drawString(120, height - 170, f"EEG Depression Risk Score: {result_data['eeg_score']} / 100")
+
+    # Section: Questionnaire
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(100, height - 220, "Mood & Sleep Questionnaire")
+    c.setFont("Helvetica", 12)
+    c.drawString(120, height - 240, f"Questionnaire Score: {result_data['questionnaire_score']} / 100")
+
+    # Section: Cognitive Test
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(100, height - 290, "Cognitive Test Result")
+    c.setFont("Helvetica", 12)
+    c.drawString(120, height - 310, f"Cognitive Score: {result_data['cognitive_score']} / 100")
+
+    # Final Index
+    c.setFont("Helvetica-Bold", 14)
+    c.drawString(100, height - 360, "Final Risk Index")
+    c.setFont("Helvetica", 12)
+    c.drawString(120, height - 380, f"Combined Risk Index: {result_data['final_index']} / 100")
+
+    c.showPage()
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+# -------------------------
+# Streamlit App
+# -------------------------
+st.title("🧠 EEG-based Depression Detection & Cognitive Assessment")
+
+# Upload EEG
 uploaded_file = st.file_uploader("Upload your EEG file (.edf)", type=["edf"])
 
 if uploaded_file is not None:
+    # Read EEG safely
+    raw = read_raw_edf(io.BytesIO(uploaded_file.read()), preload=True, verbose=False)
+    data, times = raw[:]
+    eeg_score = float(np.mean(np.abs(data[0]))) * 100
+    eeg_score = min(max(int(eeg_score), 0), 100)
+
     st.success("EEG file uploaded successfully ✅")
-
-    # Load EEG data (demo only, using mne for .edf)
-    try:
-        raw = mne.io.read_raw_edf(uploaded_file, preload=True, verbose=False)
-        data, times = raw[:]
-        # Simple feature extraction: mean power (demo only)
-        eeg_feature = np.mean(np.abs(data))
-        eeg_score = int(min(100, eeg_feature % 100)) # normalize to 0-100
-    except Exception as e:
-        st.error(f"Error reading EEG file: {e}")
-        eeg_score = None
-
-    if eeg_score is not None:
-        st.write(f"🧾 Early Risk Index (EEG-based): {eeg_score}/100")
-
+    st.write(f"EEG Depression Risk Score: **{eeg_score}/100**")
 else:
-    eeg_score = None
+    eeg_score = 50 # default demo
 
-# -----------------------------
-# Questionnaire Section
-# -----------------------------
-st.header("📝 Mood & Sleep Questionnaire")
+# Questionnaire
+st.subheader("📝 Mood & Sleep Questionnaire")
+q1 = st.slider("Over the last 2 weeks, how often have you felt little interest or pleasure in doing things?", 0, 3, 1)
+q2 = st.slider("Over the last 2 weeks, how often have you had trouble sleeping?", 0, 3, 1)
+questionnaire_score = (q1 + q2) * 20
 
-q1 = st.radio("Over the last 2 weeks, how often have you felt little interest or pleasure in doing things?",
-              ["Not at all", "Several days", "More than half the days", "Nearly every day"])
+# Cognitive Test (simple reaction time test)
+st.subheader("🧩 Cognitive Test (Demo)")
+cog_input = st.number_input("Type a number quickly (demo cognitive task)", 0, 100, 50)
+cognitive_score = 100 - abs(50 - cog_input)
 
-q2 = st.radio("Over the last 2 weeks, how often have you had trouble falling or staying asleep?",
-              ["Not at all", "Several days", "More than half the days", "Nearly every day"])
-
-# Map answers to scores
-answer_map = {
-    "Not at all": 0,
-    "Several days": 1,
-    "More than half the days": 2,
-    "Nearly every day": 3
-}
-questionnaire_score = (answer_map[q1] + answer_map[q2]) * 10 # scale to 0-60
-questionnaire_score = int(min(100, questionnaire_score))
-
-st.write(f"📋 Questionnaire Risk Score: {questionnaire_score}/100")
-
-# -----------------------------
-# Simple Cognitive Test
-# -----------------------------
-st.header("🧠 Cognitive Micro-Test")
-
-st.write("Memory test: Remember the sequence **3 - 7 - 4**. Now select the correct sequence:")
-
-cog_answer = st.selectbox("Which is correct?", ["3 - 7 - 4", "4 - 7 - 3", "7 - 3 - 4"])
-
-if cog_answer == "3 - 7 - 4":
-    cog_score = 90
-else:
-    cog_score = 40
-
-st.write(f"🧠 Cognitive Performance Score: {cog_score}/100")
-
-# -----------------------------
 # Final Index
-# -----------------------------
-if eeg_score is not None:
-    final_index = (0.5 * eeg_score) + (0.2 * questionnaire_score) + (0.3 * cog_score)
-    st.success(f"🌟 Final Early Alzheimer’s Risk Index: {final_index:.1f}/100")
-else:
-    st.info("Upload EEG file to calculate the final index.")
+final_index = int((eeg_score + questionnaire_score + cognitive_score) / 3)
+
+st.subheader("📊 Final Risk Index")
+st.write(f"**{final_index}/100**")
+
+# Collect results
+results = {
+    "eeg_score": eeg_score,
+    "questionnaire_score": questionnaire_score,
+    "cognitive_score": cognitive_score,
+    "final_index": final_index,
+    "timestamp": datetime.now().isoformat()
+}
+
+# Export JSON
+json_bytes = io.BytesIO(json.dumps(results, indent=4).encode("utf-8"))
+st.download_button("⬇️ Download Results (JSON)", data=json_bytes, file_name="results.json")
+
+# Export PDF
+pdf_file = generate_pdf(results)
+st.download_button("⬇️ Download Report (PDF)", data=pdf_file, file_name="results_report.pdf", mime="application/pdf")
+
+
+# 🧠 EEG-based Depression & Cognitive Assessment
+
+This project is a **prototype web app** built with [Streamlit](https://streamlit.io/) that combines:
+
+- **EEG analysis** (from `.edf` files) using [MNE-Python](https://mne.tools/)
+- **Questionnaire** about mood & sleep
+- **Cognitive test** (demo task)
+- **Final Risk Index** that integrates all results
+
+The app generates **PDF reports** (for clinicians/researchers) and **JSON outputs** (for data analysis)
