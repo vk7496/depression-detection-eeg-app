@@ -1,122 +1,69 @@
 import streamlit as st
 import numpy as np
-import json
-import io
-from mne.io import read_raw_edf
-from reportlab.lib.pagesizes import A4
-from reportlab.lib import colors
-from reportlab.pdfgen import canvas
-from datetime import datetime
+import mne
+import os
 
-# -------------------------
-# Helper: Generate PDF Report
-# -------------------------
-def generate_pdf(result_data):
-    buffer = io.BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    width, height = A4
+# --------------------------
+# عنوان برنامه
+# --------------------------
+st.set_page_config(page_title="EEG Depression & Cognitive Assessment", layout="centered")
 
-    # Title
-    c.setFont("Helvetica-Bold", 18)
-    c.setFillColor(colors.darkblue)
-    c.drawString(100, height - 80, "EEG-based Depression & Cognitive Assessment Report")
+st.title("🧠 EEG-based Depression & Cognitive Assessment (Demo)")
+st.write("Prototype demo combining EEG, Questionnaire, and Cognitive Test.")
 
-    # Date
-    c.setFont("Helvetica", 10)
-    c.setFillColor(colors.black)
-    c.drawString(100, height - 100, f"Date: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+# --------------------------
+# آپلود EEG
+# --------------------------
+st.header("📤 EEG Data Upload")
 
-    # Section: EEG Analysis
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(100, height - 150, "EEG Analysis Result")
-    c.setFont("Helvetica", 12)
-    c.drawString(120, height - 170, f"EEG Depression Risk Score: {result_data['eeg_score']} / 100")
-
-    # Section: Questionnaire
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(100, height - 220, "Mood & Sleep Questionnaire")
-    c.setFont("Helvetica", 12)
-    c.drawString(120, height - 240, f"Questionnaire Score: {result_data['questionnaire_score']} / 100")
-
-    # Section: Cognitive Test
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(100, height - 290, "Cognitive Test Result")
-    c.setFont("Helvetica", 12)
-    c.drawString(120, height - 310, f"Cognitive Score: {result_data['cognitive_score']} / 100")
-
-    # Final Index
-    c.setFont("Helvetica-Bold", 14)
-    c.drawString(100, height - 360, "Final Risk Index")
-    c.setFont("Helvetica", 12)
-    c.drawString(120, height - 380, f"Combined Risk Index: {result_data['final_index']} / 100")
-
-    c.showPage()
-    c.save()
-    buffer.seek(0)
-    return buffer
-
-# -------------------------
-# Streamlit App
-# -------------------------
-st.title("🧠 EEG-based Depression Detection & Cognitive Assessment")
-
-# Upload EEG
 uploaded_file = st.file_uploader("Upload your EEG file (.edf)", type=["edf"])
 
 if uploaded_file is not None:
-    # Read EEG safely
-    raw = read_raw_edf(io.BytesIO(uploaded_file.read()), preload=True, verbose=False)
-    data, times = raw[:]
-    eeg_score = float(np.mean(np.abs(data[0]))) * 100
-    eeg_score = min(max(int(eeg_score), 0), 100)
+    try:
+        # ذخیره موقت فایل آپلودی
+        temp_filename = "temp_eeg.edf"
+        with open(temp_filename, "wb") as f:
+            f.write(uploaded_file.getbuffer())
 
-    st.success("EEG file uploaded successfully ✅")
-    st.write(f"EEG Depression Risk Score: **{eeg_score}/100**")
-else:
-    eeg_score = 50 # default demo
+        # خواندن فایل EEG با MNE
+        raw = mne.io.read_raw_edf(temp_filename, preload=True, verbose=False)
 
-# Questionnaire
-st.subheader("📝 Mood & Sleep Questionnaire")
-q1 = st.slider("Over the last 2 weeks, how often have you felt little interest or pleasure in doing things?", 0, 3, 1)
-q2 = st.slider("Over the last 2 weeks, how often have you had trouble sleeping?", 0, 3, 1)
-questionnaire_score = (q1 + q2) * 20
+        # استخراج سیگنال
+        data, times = raw[:]
+        eeg_mean = np.mean(data)
 
-# Cognitive Test (simple reaction time test)
-st.subheader("🧩 Cognitive Test (Demo)")
-cog_input = st.number_input("Type a number quickly (demo cognitive task)", 0, 100, 50)
-cognitive_score = 100 - abs(50 - cog_input)
+        # محاسبه یک امتیاز نمایشی (Demo)
+        depression_score = int(abs(eeg_mean) * 100) % 100
+        st.success(f"✅ EEG file uploaded successfully! Depression Risk Score: **{depression_score}/100**")
 
-# Final Index
-final_index = int((eeg_score + questionnaire_score + cognitive_score) / 3)
+        # حذف فایل موقت
+        os.remove(temp_filename)
 
-st.subheader("📊 Final Risk Index")
-st.write(f"**{final_index}/100**")
+    except Exception as e:
+        st.error(f"⚠️ Error while processing EEG file: {e}")
 
-# Collect results
-results = {
-    "eeg_score": eeg_score,
-    "questionnaire_score": questionnaire_score,
-    "cognitive_score": cognitive_score,
-    "final_index": final_index,
-    "timestamp": datetime.now().isoformat()
-}
+# --------------------------
+# پرسشنامه ساده خلق و خواب
+# --------------------------
+st.header("📝 Mood & Sleep Questionnaire")
+q1 = st.radio("Over the last 2 weeks, how often have you felt little interest or pleasure in doing things?",
+              ["Not at all", "Several days", "More than half the days", "Nearly every day"])
+q2 = st.radio("Over the last 2 weeks, how often have you had trouble falling or staying asleep?",
+              ["Not at all", "Several days", "More than half the days", "Nearly every day"])
 
-# Export JSON
-json_bytes = io.BytesIO(json.dumps(results, indent=4).encode("utf-8"))
-st.download_button("⬇️ Download Results (JSON)", data=json_bytes, file_name="results.json")
+if q1 or q2:
+    st.write("✅ Responses recorded.")
 
-# Export PDF
-pdf_file = generate_pdf(results)
-st.download_button("⬇️ Download Report (PDF)", data=pdf_file, file_name="results_report.pdf", mime="application/pdf")
-
-
-# 🧠 EEG-based Depression & Cognitive Assessment
-
+# --------------------------
+# توضیح پروژه
+# --------------------------
+st.header("ℹ️ About this Project")
+st.markdown("""
 This project is a **prototype web app** built with [Streamlit](https://streamlit.io/) that combines:
 
-- **EEG analysis** (from `.edf` files) using [MNE-Python](https://mne.tools/)
-- **Questionnaire** about mood & sleep
-- **Cognitive test** (demo task)
-- **Final Risk Index** that integrates all results
+- EEG data analysis  
+- Mood & sleep questionnaires  
+- Cognitive assessment demo  
 
-The app generates **PDF reports** (for clinicians/researchers) and **JSON outputs** (for data analysis)
+⚠️ *Note: This is a prototype and not a medical diagnostic tool.*
+""")
